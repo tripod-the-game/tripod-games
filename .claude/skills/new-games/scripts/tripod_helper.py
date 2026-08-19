@@ -1,22 +1,63 @@
 #!/usr/bin/env python3
 """Helper for the new-games skill: reads puzzle history and verifies candidates.
 
-Two subcommands:
+Subcommands:
   context  -- scan the repo's existing puzzles and print a JSON summary of
               recent categories/words to avoid, plus the next unused dates.
   verify   -- check one candidate game (JSON on argv) against the triangle
               constraint and against recent word/category usage.
+  pattern  -- look up real dictionary words matching a letter pattern
+              (e.g. size 5, pattern "c___t" -> all 5-letter words starting
+              with c and ending in t). Use this to browse real candidates
+              for a corner-letter slot instead of guessing from memory.
+  search   -- given a JSON list of candidate words you believe fit a theme,
+              find every valid triangle among the ones that are real
+              dictionary words (checked against data/words{4,5}.txt), and
+              flag any supplied words that aren't in the dictionary.
+
+The dictionary (data/words4.txt, data/words5.txt) is a bundled, frequency-
+filtered list of common English words (not proper nouns, not Scrabble-only
+obscurities) -- see README-ish note in cmd_pattern/cmd_search docstrings.
 """
 import argparse
 import glob
+import itertools
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 WORD_REUSE_MIN_DAYS = 20  # observed norm in repo history: reused words are usually 20+ days apart
 RECURRING_CATEGORY_MIN_USES = 2  # categories used >=2 times are treated as intentional recurring buckets
+
+
+def load_dictionary(size):
+    path = os.path.join(DATA_DIR, f"words{size}.txt")
+    with open(path) as f:
+        return [w.strip() for w in f if w.strip()]
+
+
+def find_triangles(words):
+    """Return every (wordOne, wordTwo, wordThree) triple in `words` that
+    satisfies the triangle constraint. O(n^2) apex-matching, not O(n^3)."""
+    words = list(dict.fromkeys(words))  # dedupe, keep order
+    by_first = {}
+    for w in words:
+        by_first.setdefault(w[0], []).append(w)
+
+    results = []
+    for w1, w2 in itertools.permutations(words, 2):
+        if w1[-1] != w2[0]:
+            continue
+        for w3 in by_first.get(w1[0], []):
+            if w3 in (w1, w2):
+                continue
+            if w2[-1] == w3[-1]:
+                results.append((w1, w2, w3))
+    return results
 
 
 def load_all_games():
@@ -199,6 +240,74 @@ def cmd_verify(args):
         sys.exit(1)
 
 
+def cmd_pattern(args):
+    size = args.size
+    pattern = args.pattern
+    if len(pattern) != size:
+        print(json.dumps({"error": f"pattern length {len(pattern)} != size {size}"}))
+        sys.exit(1)
+
+    regex = "^" + "".join("." if c in "_." else re.escape(c) for c in pattern.lower()) + "$"
+    rx = re.compile(regex)
+
+    dictionary = load_dictionary(size)
+    matches = [w for w in dictionary if rx.match(w)]
+    print(json.dumps({
+        "pattern": pattern,
+        "size": size,
+        "match_count": len(matches),
+        "matches": matches,
+    }, indent=2))
+
+
+def cmd_search(args):
+    try:
+        candidates = json.loads(args.words)
+    except json.JSONDecodeError as e:
+        print(json.dumps({"error": f"invalid JSON: {e}"}))
+        sys.exit(1)
+
+    size = args.size
+    dictionary = set(load_dictionary(size))
+
+    candidates = [w.lower() for w in candidates]
+    valid = [w for w in candidates if len(w) == size and w in dictionary]
+    not_in_dictionary = [w for w in candidates if w not in valid]
+
+    triangles = find_triangles(valid)
+
+    games = load_all_games()
+    latest_date = games[-1][0] if games else None
+    word_last_used = {}
+    for date, base, data in games:
+        for w in (data.get("wordOne"), data.get("wordTwo"), data.get("wordThree")):
+            if w:
+                word_last_used[w] = base
+
+    def recency_flag(w):
+        if w in word_last_used and latest_date:
+            days_ago = (latest_date - datetime.strptime(word_last_used[w], "%m%d%y")).days
+            if days_ago < WORD_REUSE_MIN_DAYS:
+                return f"used {days_ago}d ago"
+        return None
+
+    results = []
+    for w1, w2, w3 in triangles:
+        flags = {w: recency_flag(w) for w in (w1, w2, w3) if recency_flag(w)}
+        results.append({
+            "wordOne": w1, "wordTwo": w2, "wordThree": w3,
+            "recency_warnings": flags or None,
+        })
+
+    print(json.dumps({
+        "size": size,
+        "candidates_supplied": len(candidates),
+        "candidates_not_in_dictionary": not_in_dictionary,
+        "triangle_count": len(results),
+        "triangles": results,
+    }, indent=2))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -210,6 +319,16 @@ def main():
     p_verify = sub.add_parser("verify", help="verify one candidate game JSON")
     p_verify.add_argument("json", help="candidate game as a JSON string")
     p_verify.set_defaults(func=cmd_verify)
+
+    p_pattern = sub.add_parser("pattern", help="look up real words matching a letter pattern")
+    p_pattern.add_argument("size", type=int, choices=[4, 5])
+    p_pattern.add_argument("pattern", help="e.g. c___t (use _ as wildcard)")
+    p_pattern.set_defaults(func=cmd_pattern)
+
+    p_search = sub.add_parser("search", help="find valid triangles among a list of candidate words")
+    p_search.add_argument("size", type=int, choices=[4, 5])
+    p_search.add_argument("words", help="JSON array of candidate words, e.g. '[\"pass\",\"shot\",\"post\"]'")
+    p_search.set_defaults(func=cmd_search)
 
     args = parser.parse_args()
     args.func(args)
