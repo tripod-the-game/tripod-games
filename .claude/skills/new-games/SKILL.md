@@ -42,10 +42,30 @@ freshly generated candidate should follow that pattern, not just satisfy the cor
    - Follow CLAUDE.md's guidance on what makes a category good: specific but not obscure, 10+ candidate
      words in your head before you commit to it.
 
-3. **Design each puzzle** per CLAUDE.md's Step 2-3 (pick BL/apex/BR corner letters, then find category
-   words that fit the pattern). Prefer words not in `word_last_used` at all; if you do reuse one, check
-   its `days_ago` and keep it comfortably above the `word_reuse_min_days_norm` (20) — otherwise pick a
-   different word.
+3. **Design each puzzle using the bundled dictionary, not guesswork.** `data/words4.txt` and
+   `data/words5.txt` are real, frequency-filtered English word lists (~2,600 and ~3,600 words) bundled
+   with this skill — don't rely on words you can personally recall fitting a pattern, since that misses
+   real matches and occasionally invents non-words. Two ways to use them, matching CLAUDE.md's Step 2-3:
+
+   - **Words first:** brainstorm 8-15 words you believe belong to the category, then run
+     ```
+     python3 .claude/skills/new-games/scripts/tripod_helper.py search <size> '["word1","word2",...]'
+     ```
+     It tells you which of your words aren't in the dictionary (drop or double-check those — could be a
+     proper noun, which is fine, or a typo/rare word, which isn't) and returns *every* valid triangle
+     among the rest, each pre-flagged with any recent-reuse warning. This is exact — it will surface
+     combinations you wouldn't have spotted by hand.
+   - **Letters first:** if you've picked BL/apex/BR corner letters, run
+     ```
+     python3 .claude/skills/new-games/scripts/tripod_helper.py pattern <size> <pattern>
+     ```
+     with `_` as a wildcard (e.g. `pattern 5 c___t` for 5-letter words starting `c`, ending `t`) to see
+     every real word that could fill that slot, then judge which ones fit your category.
+
+   Either way, prefer words not in `word_last_used` at all; if you do reuse one, check its `days_ago` and
+   keep it comfortably above `word_reuse_min_days_norm` (20) — otherwise pick a different word. The
+   dictionary confirms a word is *real and reasonably common*; it doesn't know what's thematically
+   strong or too obscure for the category — that judgment call is still yours, per CLAUDE.md's guidance.
 
 4. **Verify every candidate before presenting it.** Run:
    ```
