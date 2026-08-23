@@ -77,6 +77,18 @@ freshly generated candidate should follow that pattern, not just satisfy the cor
    exact) plus word length/format and re-checks recent category/word usage. Fix and re-run until `"ok":
    true` with no warnings you can't justify. Do this for all 3 candidates before showing them to the user.
 
+5. **Check each category name against the corpus semantically**, not just for exact repeats. `verify`
+   only catches an identical category string; it won't catch a fresh-sounding name that's really the
+   same idea in different words (e.g. "Forecast" reads as new next to an existing "Weather" category
+   until you check). Run:
+   ```
+   python3 .claude/skills/category-similarity/scripts/check_similarity.py "<category name>"
+   ```
+   for each candidate category. It ranks existing categories by semantic closeness — read the top match
+   and use judgment (it's a screening aid, not a hard gate; see that skill's own docs for what its scores
+   do and don't mean). If the top match is a near-synonym, swap in a different angle on the category
+   before presenting it.
+
 ## Output format
 
 Present exactly 3 candidates (unless the user asked for a different number), each like this:
