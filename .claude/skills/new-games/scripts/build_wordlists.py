@@ -14,7 +14,7 @@ import re
 
 from wordfreq import top_n_list
 
-TOP_N = 30000  # ~2,600 4-letter and ~3,600 5-letter words at this cutoff
+TOP_N = 50000  # ~3,900 4-letter and ~5,600 5-letter words at this cutoff
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 
 
