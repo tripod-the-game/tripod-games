@@ -138,3 +138,30 @@ Check all three constraints explicitly before writing the JSON.
 | Geology | shale | erode | stone |
 | Liquid Toppings | syrup | puree | sauce |
 | On the Farm | steer | range | swine |
+
+---
+
+## Puzzle Packs
+
+Packs are themed puzzle sets outside the daily schedule (e.g. the Call of Duty pack for streams). They don't count toward daily stats or streaks.
+
+```
+packs/
+  index.json          ← [{ "id": "cod", "title": "Call of Duty", "description": "...", "count": 10 }]
+  cod/
+    001.json          ← puzzles numbered 001..count
+```
+
+- Pack ids are lowercase letters, digits and hyphens. They appear in the URL: `/pack/cod/3`
+- Puzzle files use the same format as daily games, plus `"encoded": true` with **base64** words so answers aren't readable at a glance in this public repo (a spoiler guard for stream chat, not real security)
+- The same rules apply: verify the triangle, keep words coherent with the category, and don't repeat a word within a pack
+- Avoid triangles where wordOne and wordThree are interchangeable (same first *and* last letter): the puzzle would have two valid answers
+
+Use the helper instead of editing by hand:
+
+```
+node scripts/packs.js add cod "Category" wordone wordtwo wordthree   # checks the triangle, writes the next NNN.json, bumps count
+node scripts/packs.js verify --show                                  # checks every pack and prints decoded answers
+```
+
+To add a new pack, add an entry to `packs/index.json` with `"count": 0`, then use `add`.
